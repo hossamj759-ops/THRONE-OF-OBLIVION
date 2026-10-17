@@ -1,289 +1,307 @@
-(() => {
-  "use strict";
+"use strict";
 
-  // Make sure chess.js is loaded in index.html
+document.addEventListener("DOMContentLoaded", function () {
+  const boardElement = document.getElementById("board");
+  const messageElement = document.getElementById("message");
+  const turnElement = document.getElementById("turn");
+  const historyElement = document.getElementById("moveHistory");
+  const resetButton = document.getElementById("resetBtn");
+  const undoButton = document.getElementById("undoBtn");
+
+  if (!boardElement || !messageElement || !turnElement || !historyElement) {
+    console.error("Game HTML elements are missing.");
+    return;
+  }
+
   if (typeof Chess === "undefined") {
-    const message = document.getElementById("message");
-
-    if (message) {
-      message.textContent =
-        "Chess engine not loaded. Check your internet connection.";
-    }
-
+    messageElement.textContent =
+      "Chess library not loaded. Check your internet connection.";
     return;
   }
 
-  const chess = new Chess();
-
-  const board = document.getElementById("board");
-  const message = document.getElementById("message");
-  const turnMessage = document.getElementById("turn-message");
-  const history = document.getElementById("move-history");
-
-  if (!board) {
-    console.error('Could not find an element with id="board".');
-    return;
-  }
-
-  const symbols = {
-    wk: "♔",
-    wq: "♕",
-    wr: "♖",
-    wb: "♗",
-    wn: "♘",
-    wp: "♙",
-    bk: "♚",
-    bq: "♛",
-    br: "♜",
-    bb: "♝",
-    bn: "♞",
-    bp: "♟"
-  };
-
-  let selectedSquare = null;
-  let legalMoves = [];
-  let flipped = false;
-  let lastMove = null;
+  const game = new Chess();
 
   const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-  function squareName(row, col) {
-    return files[col] + (8 - row);
-  }
-
-  function getGameStatus() {
-    if (chess.in_checkmate()) {
-      return chess.turn() === "w"
-        ? "Checkmate! Black wins."
-        : "Checkmate! White wins.";
+  const symbols = {
+    w: {
+      k: "♔",
+      q: "♕",
+      r: "♖",
+      b: "♗",
+      n: "♘",
+      p: "♙"
+    },
+    b: {
+      k: "♚",
+      q: "♛",
+      r: "♜",
+      b: "♝",
+      n: "♞",
+      p: "♟"
     }
+  };
 
-    if (chess.in_stalemate()) {
-      return "Draw by stalemate.";
-    }
+  let selectedSquare = null;
+  let legalTargets = [];
+  let moveHistory = [];
 
-    if (chess.in_draw()) {
-      return "The game is a draw.";
-    }
+  function getPieceName(piece) {
+    const names = {
+      k: "King",
+      q: "Queen",
+      r: "Rook",
+      b: "Bishop",
+      n: "Knight",
+      p: "Pawn"
+    };
 
-    if (chess.in_check()) {
-      return chess.turn() === "w"
-        ? "White is in check!"
-        : "Black is in check!";
-    }
-
-    return chess.turn() === "w"
-      ? "White to move."
-      : "Black to move.";
-  }
-
-  function updateStatus() {
-    if (message) {
-      message.textContent = getGameStatus();
-    }
-
-    if (turnMessage) {
-      turnMessage.textContent =
-        chess.turn() === "w" ? "White's turn ♔" : "Black's turn ♚";
-    }
-  }
-
-  function renderHistory() {
-    if (!history) return;
-
-    const moves = chess.history();
-
-    if (moves.length === 0) {
-      history.innerHTML = "";
-      return;
-    }
-
-    let html = "";
-
-    for (let i = 0; i < moves.length; i += 2) {
-      const number = Math.floor(i / 2) + 1;
-      const whiteMove = moves[i];
-      const blackMove = moves[i + 1] || "";
-
-      html +=
-        `<div>${number}. ${whiteMove} ` +
-        `${blackMove}</div>`;
-    }
-
-    history.innerHTML = html;
+    return names[piece.type] || "Piece";
   }
 
   function renderBoard() {
-    board.innerHTML = "";
+    boardElement.innerHTML = "";
+
+    const position = game.board();
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
-        const actualRow = flipped ? 7 - row : row;
-        const actualCol = flipped ? 7 - col : col;
-        const square = squareName(actualRow, actualCol);
-        const piece = chess.get(square);
+        const square = document.createElement("button");
+        const squareName = files[col] + (8 - row);
+        const piece = position[row][col];
 
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className =
-          "square " +
-          ((actualRow + actualCol) % 2 === 0 ? "light" : "dark");
+        square.type = "button";
+        square.className = "square";
+        square.dataset.square = squareName;
+        square.setAttribute("aria-label", squareName);
+        square.setAttribute("role", "gridcell");
 
-        button.dataset.square = square;
-        button.setAttribute(
-          "aria-label",
-          piece
-            ? square + " " + piece.color + " " + piece.type
-            : square
-        );
-
-        if (
-          lastMove &&
-          (square === lastMove.from || square === lastMove.to)
-        ) {
-          button.classList.add("last-move");
-        }
-
-        if (square === selectedSquare) {
-          button.classList.add("selected");
-        }
-
-        if (legalMoves.some(move => move.to === square)) {
-          button.classList.add("legal");
-        }
+        const isLight = (row + col) % 2 === 0;
+        square.classList.add(isLight ? "light" : "dark");
 
         if (piece) {
-          const span = document.createElement("span");
-          span.className =
-            "piece " + (piece.color === "w" ? "white" : "black");
-          span.textContent = symbols[piece.color + piece.type];
-          button.appendChild(span);
+          square.textContent = symbols[piece.color][piece.type];
+          square.classList.add(
+            piece.color === "w" ? "white-piece" : "black-piece"
+          );
+          square.setAttribute(
+            "aria-label",
+            getPieceName(piece) + " on " + squareName
+          );
         }
 
-        button.addEventListener("click", () => {
-          handleSquareClick(square);
+        if (squareName === selectedSquare) {
+          square.classList.add("selected");
+        }
+
+        if (legalTargets.includes(squareName)) {
+          square.classList.add("legal-target");
+
+          if (piece) {
+            square.classList.add("capture-target");
+          }
+        }
+
+        if (
+          game.isCheck() &&
+          piece &&
+          piece.type === "k" &&
+          piece.color === game.turn()
+        ) {
+          square.classList.add("king-in-check");
+        }
+
+        square.addEventListener("click", function () {
+          handleSquareClick(squareName);
         });
 
-        board.appendChild(button);
+        boardElement.appendChild(square);
       }
     }
-
-    updateStatus();
-    renderHistory();
   }
 
-  function clearSelection() {
-    selectedSquare = null;
-    legalMoves = [];
+  function showMessage(text) {
+    messageElement.textContent = text;
   }
 
-  function handleSquareClick(square) {
-    if (chess.game_over()) return;
-
-    const piece = chess.get(square);
-
-    // Try moving the currently selected piece.
-    if (selectedSquare) {
-      const possible = legalMoves.filter(move => move.to === square);
-
-      if (possible.length > 0) {
-        makeMove(selectedSquare, square);
-        return;
-      }
+  function updateGameStatus() {
+    if (game.isCheckmate()) {
+      const winner = game.turn() === "w" ? "BLACK" : "WHITE";
+      showMessage("CHECKMATE! " + winner + " WINS!");
+    } else if (game.isDraw()) {
+      showMessage("DRAW! THE BATTLE IS OVER.");
+    } else if (game.isCheck()) {
+      showMessage("CHECK! THE KING IS UNDER ATTACK.");
+    } else {
+      showMessage("Choose a piece to make your move.");
     }
 
-    // Select a piece belonging to the current player.
-    if (piece && piece.color === chess.turn()) {
-      selectedSquare = square;
-      legalMoves = chess.moves({
-        square: square,
-        verbose: true
-      });
+    turnElement.textContent =
+      game.turn() === "w" ? "White ♔" : "Black ♚";
+  }
 
-      renderBoard();
+  function showHistory() {
+    historyElement.innerHTML = "";
+
+    if (moveHistory.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "empty-history";
+      empty.textContent = "Your moves will appear here...";
+      historyElement.appendChild(empty);
       return;
     }
 
-    clearSelection();
+    const list = document.createElement("ol");
+    list.className = "history-list";
+
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      const item = document.createElement("li");
+
+      const whiteMove = document.createElement("span");
+      whiteMove.textContent = moveHistory[i].san;
+
+      item.appendChild(whiteMove);
+
+      if (moveHistory[i + 1]) {
+        const blackMove = document.createElement("span");
+        blackMove.textContent = "  " + moveHistory[i + 1].san;
+        item.appendChild(blackMove);
+      }
+
+      list.appendChild(item);
+    }
+
+    historyElement.appendChild(list);
+  }
+
+  function handleSquareClick(squareName) {
+    if (game.isGameOver()) {
+      showMessage("Game over! Start a new game to play again.");
+      return;
+    }
+
+    const piece = game.get(squareName);
+
+    if (selectedSquare && legalTargets.includes(squareName)) {
+      makeMove(selectedSquare, squareName);
+      return;
+    }
+
+    if (piece && piece.color === game.turn()) {
+      selectedSquare = squareName;
+
+      legalTargets = game
+        .moves({
+          square: squareName,
+          verbose: true
+        })
+        .map(function (move) {
+          return move.to;
+        });
+
+      renderBoard();
+
+      if (legalTargets.length > 0) {
+        showMessage(
+          getPieceName(piece) + " selected. Choose a highlighted square."
+        );
+      } else {
+        showMessage("This piece has no legal moves.");
+      }
+
+      return;
+    }
+
+    selectedSquare = null;
+    legalTargets = [];
+
     renderBoard();
+    updateGameStatus();
   }
 
   function makeMove(from, to) {
-    const piece = chess.get(from);
-    let promotion = "q";
+    const movingPiece = game.get(from);
 
-    // Promote a pawn to a queen automatically.
-    if (
-      piece &&
-      piece.type === "p" &&
-      (to.endsWith("8") || to.endsWith("1"))
-    ) {
-      promotion = "q";
-    }
-
-    const move = chess.move({
+    let move = game.move({
       from: from,
       to: to,
-      promotion: promotion
+      promotion: "q"
     });
 
-    clearSelection();
-
-    if (move) {
-      lastMove = {
-        from: move.from,
-        to: move.to
-      };
+    if (!move) {
+      selectedSquare = null;
+      legalTargets = [];
+      renderBoard();
+      updateGameStatus();
+      return;
     }
 
+    moveHistory = game.history({ verbose: true });
+
+    selectedSquare = null;
+    legalTargets = [];
+
     renderBoard();
+    showHistory();
+    updateGameStatus();
+
+    if (!game.isGameOver()) {
+      showMessage(move.san + " — your move.");
+    }
+
+    if (game.isCheckmate()) {
+      showMessage("CHECKMATE! " + (game.turn() === "w" ? "BLACK" : "WHITE") + " WINS!");
+    }
+  }
+
+  function resetGame() {
+    game.reset();
+
+    selectedSquare = null;
+    legalTargets = [];
+    moveHistory = [];
+
+    renderBoard();
+    showHistory();
+    updateGameStatus();
+
+    showMessage("A new battle begins. White moves first.");
   }
 
   function undoMove() {
-    const move = chess.undo();
+    const undone = game.undo();
 
-    if (!move) return;
+    if (!undone) {
+      showMessage("There are no moves to undo.");
+      return;
+    }
 
-    const previous = chess.history({ verbose: true });
-    const last = previous[previous.length - 1];
+    game.undo();
 
-    lastMove = last
-      ? { from: last.from, to: last.to }
-      : null;
+    moveHistory = game.history({ verbose: true });
+    selectedSquare = null;
+    legalTargets = [];
 
-    clearSelection();
     renderBoard();
+    showHistory();
+    updateGameStatus();
+
+    showMessage("Last turn undone.");
   }
 
-  function restartGame() {
-    chess.reset();
-    clearSelection();
-    lastMove = null;
-    renderBoard();
-  }
-
-  function flipBoard() {
-    flipped = !flipped;
-    renderBoard();
-  }
-
-  // Connect buttons if they exist in your HTML.
-  const restartButton = document.getElementById("restart");
-  const undoButton = document.getElementById("undo");
-  const flipButton = document.getElementById("flip");
-
-  if (restartButton) {
-    restartButton.addEventListener("click", restartGame);
+  if (resetButton) {
+    resetButton.addEventListener("click", resetGame);
   }
 
   if (undoButton) {
     undoButton.addEventListener("click", undoMove);
   }
 
-  if (flipButton) {
-    flipButton.addEventListener("click", flipBoard);
-  }
+  boardElement.setAttribute("role", "grid");
 
-  // Initial render
   renderBoard();
-})();
+  showHistory();
+  updateGameStatus();
+
+  showMessage("Welcome to THE FORBIDDEN CHECKMATE. White moves first.");
+});
